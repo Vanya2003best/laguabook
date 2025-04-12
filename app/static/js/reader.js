@@ -1,140 +1,154 @@
 // app/static/js/reader.js
 
 $(document).ready(function() {
-    // Константы и переменные для пагинации
+    // Переменные для пагинации
     let currentPage = 1;
     let totalPages = 1;
     let paginatedContent = [];
 
-    // Максимальное количество слов на страницу
-    const MAX_WORDS_PER_PAGE = 300;
+    // Переменные для работы со словами
+    let currentWord = null;
+    let currentWordContext = null;
 
-    // Инициализация пагинации
+    // Константы для пагинации
+    const MAX_LINES_PER_PAGE = 25;     // Максимальное количество строк на странице
+    const AVG_CHARS_PER_LINE = 80;     // Среднее количество символов в строке
+    const MAX_CHARS_PER_PAGE = MAX_LINES_PER_PAGE * AVG_CHARS_PER_LINE;
+
+    // Функция инициализации пагинации
     function initializePagination() {
-        const content = $('.reader-text').html();
-        $('.reader-text').empty();
+        console.log("Initializing pagination...");
 
-        // Если контент пустой, выходим
-        if (!content || content.trim() === '') {
+        // Получаем исходный текст
+        const originalContent = $('.reader-text').html();
+        if (!originalContent || originalContent.trim() === '') {
             console.error('Content is empty, nothing to paginate');
             return;
         }
 
-        console.log('Initializing pagination for content...');
+        // Очищаем текстовый контейнер
+        $('.reader-text').empty();
 
-        // Принудительно разбиваем содержимое на страницы по словам
-        // При большой книге обычные методы разбивки по высоте могут работать некорректно
+        // Разбиваем текст на абзацы по <br> тегам
+        const paragraphs = originalContent.split(/<br\s*\/?>/i).filter(p => p.trim() !== '');
+
+        // Разбиваем на страницы с учетом заданного количества строк
         paginatedContent = [];
-
-        // Разбиваем контент на абзацы и отдельные элементы
-        const paragraphs = content.split('<br>');
-
         let currentPageContent = '';
-        let wordCount = 0;
+        let currentCharCount = 0;
 
-        // Перебираем все абзацы
+        // Для каждого абзаца
         for (let i = 0; i < paragraphs.length; i++) {
             const paragraph = paragraphs[i];
 
-            // Пропускаем пустые параграфы
-            if (!paragraph.trim()) {
-                continue;
-            }
+            // Приблизительное количество символов в абзаце (учитываем HTML-теги)
+            const textLength = paragraph.replace(/<[^>]*>/g, '').length;
 
-            // Разбиваем абзац на приблизительное количество слов
-            // Используем регулярное выражение для примерного подсчета слов
-            const paragraphWordCount = paragraph.split(/\s+/).length;
+            // Если абзац слишком большой для одной страницы, разбиваем его на предложения
+            if (textLength > MAX_CHARS_PER_PAGE) {
+                // Разбиваем абзац на предложения (учитываем русские и английские предложения)
+                const sentences = paragraph.split(/(?<=[.!?])\s+/).filter(s => s.trim() !== '');
+                let sentenceGroup = '';
+                let sentenceGroupLength = 0;
 
-            // Если добавление этого абзаца превысит лимит и у нас уже есть содержимое,
-            // создаем новую страницу
-            if (wordCount + paragraphWordCount > MAX_WORDS_PER_PAGE && currentPageContent !== '') {
-                paginatedContent.push(currentPageContent);
-                currentPageContent = '';
-                wordCount = 0;
-            }
-
-            // Добавляем абзац к текущей странице
-            if (currentPageContent !== '') {
-                currentPageContent += '<br>';
-            }
-            currentPageContent += paragraph;
-            wordCount += paragraphWordCount;
-
-            // Если этот абзац сам по себе большой, разбиваем его на несколько страниц
-            if (paragraphWordCount > MAX_WORDS_PER_PAGE * 2) {
-                console.log('Large paragraph detected, forcing pagination');
-                // Разбиваем длинный абзац на предложения
-                const sentences = paragraph.split(/(?<=[.!?])\s+/);
-                let sentencePage = '';
-                let sentenceWordCount = 0;
-
+                // Для каждого предложения в абзаце
                 for (let j = 0; j < sentences.length; j++) {
                     const sentence = sentences[j];
-                    const sentenceWords = sentence.split(/\s+/).length;
+                    const sentenceLength = sentence.replace(/<[^>]*>/g, '').length;
 
-                    if (sentenceWordCount + sentenceWords > MAX_WORDS_PER_PAGE && sentencePage !== '') {
+                    // Проверяем, поместится ли предложение на текущую страницу
+                    if (currentCharCount + sentenceGroupLength + sentenceLength > MAX_CHARS_PER_PAGE) {
+                        // Если текущая группа предложений не пуста, добавляем ее к текущей странице
+                        if (sentenceGroup !== '') {
+                            if (currentPageContent !== '') {
+                                currentPageContent += '<br>';
+                            }
+                            currentPageContent += sentenceGroup;
+                            currentCharCount += sentenceGroupLength;
+
+                            // Если предложение не помещается, создаем новую страницу
+                            if (currentCharCount + sentenceLength > MAX_CHARS_PER_PAGE) {
+                                paginatedContent.push(currentPageContent);
+                                currentPageContent = '';
+                                currentCharCount = 0;
+                            }
+                        }
+
+                        // Сбрасываем группу предложений и добавляем текущее предложение
+                        sentenceGroup = sentence;
+                        sentenceGroupLength = sentenceLength;
+                    } else {
+                        // Предложение помещается в текущую группу
+                        if (sentenceGroup !== '') {
+                            sentenceGroup += ' ';
+                            sentenceGroupLength += 1;
+                        }
+                        sentenceGroup += sentence;
+                        sentenceGroupLength += sentenceLength;
+                    }
+                }
+
+                // Добавляем оставшиеся предложения
+                if (sentenceGroup !== '') {
+                    if (currentCharCount + sentenceGroupLength > MAX_CHARS_PER_PAGE) {
+                        // Если текущая страница не пуста и группа предложений не помещается, создаем новую страницу
                         if (currentPageContent !== '') {
                             paginatedContent.push(currentPageContent);
+                            currentPageContent = sentenceGroup;
+                            currentCharCount = sentenceGroupLength;
+                        } else {
+                            // Текущая страница пуста, добавляем группу предложений
+                            currentPageContent = sentenceGroup;
+                            currentCharCount = sentenceGroupLength;
                         }
-                        paginatedContent.push(sentencePage);
-                        sentencePage = '';
-                        sentenceWordCount = 0;
-                        currentPageContent = '';
-                        wordCount = 0;
+                    } else {
+                        // Группа предложений помещается на текущую страницу
+                        if (currentPageContent !== '') {
+                            currentPageContent += '<br>';
+                            currentCharCount += 1;
+                        }
+                        currentPageContent += sentenceGroup;
+                        currentCharCount += sentenceGroupLength;
                     }
-
-                    if (sentencePage !== '') {
-                        sentencePage += ' ';
+                }
+            } else {
+                // Абзац поместится на одну страницу, проверяем, поместится ли с текущим контентом
+                if (currentCharCount + textLength + 1 > MAX_CHARS_PER_PAGE) {
+                    // Не поместится, создаем новую страницу
+                    paginatedContent.push(currentPageContent);
+                    currentPageContent = paragraph;
+                    currentCharCount = textLength;
+                } else {
+                    // Поместится на текущую страницу
+                    if (currentPageContent !== '') {
+                        currentPageContent += '<br>';
+                        currentCharCount += 1;
                     }
-                    sentencePage += sentence;
-                    sentenceWordCount += sentenceWords;
+                    currentPageContent += paragraph;
+                    currentCharCount += textLength;
                 }
+            }
 
-                if (sentencePage !== '') {
-                    currentPageContent = sentencePage;
-                    wordCount = sentenceWordCount;
-                }
+            // Если накопилось достаточно текста, создаем новую страницу
+            if (currentCharCount >= MAX_CHARS_PER_PAGE && i < paragraphs.length - 1) {
+                paginatedContent.push(currentPageContent);
+                currentPageContent = '';
+                currentCharCount = 0;
             }
         }
 
-        // Добавляем последнюю страницу, если она не пуста
-        if (currentPageContent !== '') {
+        // Добавляем последнюю страницу, если остался контент
+        if (currentPageContent) {
             paginatedContent.push(currentPageContent);
         }
 
-        // Если у нас нет страниц или всего одна небольшая страница,
-        // принудительно разбиваем текст на фрагменты
-        if (paginatedContent.length <= 1 && content.length > 1000) {
-            console.log('Forcing content splitting');
-            paginatedContent = [];
-
-            // Разбиваем весь текст на примерно равные части
-            const totalChars = content.length;
-            const charsPerPage = 2000; // примерное количество символов на страницу
-
-            for (let i = 0; i < totalChars; i += charsPerPage) {
-                // При разбиении пытаемся не разрывать слова
-                let endPos = Math.min(i + charsPerPage, totalChars);
-                if (endPos < totalChars) {
-                    // Ищем ближайший пробел или конец предложения
-                    const nextSpace = content.indexOf(' ', endPos);
-                    const nextPeriod = content.indexOf('. ', endPos);
-
-                    if (nextPeriod > -1 && nextPeriod < nextSpace + 20) {
-                        endPos = nextPeriod + 1;
-                    } else if (nextSpace > -1 && nextSpace < endPos + 50) {
-                        endPos = nextSpace;
-                    }
-                }
-
-                const pageContent = content.substring(i, endPos);
-                paginatedContent.push(pageContent);
-            }
+        // Если получилось слишком мало страниц или текст слишком мал
+        if (paginatedContent.length === 0) {
+            paginatedContent = [originalContent];
         }
 
-        // Обновляем количество страниц
+        // Обновляем общее количество страниц
         totalPages = paginatedContent.length;
-
         console.log(`Content divided into ${totalPages} pages`);
 
         // Добавляем элементы управления пагинацией
@@ -144,7 +158,7 @@ $(document).ready(function() {
         showPage(1);
     }
 
-    // Показываем указанную страницу
+    // Показать указанную страницу
     function showPage(pageNumber) {
         if (pageNumber < 1 || pageNumber > totalPages) return;
 
@@ -154,7 +168,7 @@ $(document).ready(function() {
         // Обновляем отображение номера страницы
         $('.pagination-controls .page-info').text(`${currentPage} / ${totalPages}`);
 
-        // Обновляем состояние кнопок
+        // Обновляем состояние кнопок навигации
         $('.pagination-controls #prev-page').prop('disabled', currentPage === 1);
         $('.pagination-controls #next-page').prop('disabled', currentPage === totalPages);
 
@@ -167,32 +181,32 @@ $(document).ready(function() {
 
     // Добавляем элементы управления пагинацией
     function addPaginationControls() {
-        // Проверяем, существуют ли элементы управления уже
-        if ($('.pagination-controls').length === 0) {
-            // Создаем контейнер для элементов управления пагинацией
-            const paginationControls = `
-                <div class="pagination-controls text-center mb-3">
-                    <button id="prev-page" class="btn btn-outline-secondary me-2" ${currentPage === 1 ? 'disabled' : ''}>
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <span class="page-info mx-2">
-                        ${currentPage} / ${totalPages}
-                    </span>
-                    <button id="next-page" class="btn btn-outline-secondary ms-2" ${currentPage === totalPages ? 'disabled' : ''}>
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
-            `;
+        // Удаляем существующие элементы управления, чтобы избежать дублирования
+        $('.pagination-controls').remove();
 
-            $('.reader-container').prepend(paginationControls);
-        }
+        // Создаем и добавляем новые элементы управления
+        const paginationControls = `
+            <div class="pagination-controls text-center mb-3">
+                <button id="prev-page" class="btn btn-outline-secondary me-2" ${currentPage === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="page-info mx-2">
+                    ${currentPage} / ${totalPages}
+                </span>
+                <button id="next-page" class="btn btn-outline-secondary ms-2" ${currentPage === totalPages ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        `;
 
-        // Привязываем обработчики событий
-        $('#prev-page').off('click').on('click', function() {
+        $('.reader-container').prepend(paginationControls);
+
+        // Привязываем обработчики событий к кнопкам
+        $('#prev-page').on('click', function() {
             showPage(currentPage - 1);
         });
 
-        $('#next-page').off('click').on('click', function() {
+        $('#next-page').on('click', function() {
             showPage(currentPage + 1);
         });
 
@@ -205,7 +219,7 @@ $(document).ready(function() {
             }
         });
 
-        // Добавляем навигацию с помощью жестов (свайпов) для мобильных устройств
+        // Добавляем жесты свайпа для мобильных устройств
         let touchStartX = 0;
         $('.reader-container').off('touchstart').on('touchstart', function(e) {
             touchStartX = e.originalEvent.touches[0].clientX;
@@ -217,23 +231,23 @@ $(document).ready(function() {
 
             if (Math.abs(diff) > 50) { // Минимальное расстояние для определения свайпа
                 if (diff > 0) {
-                    // Свайп влево (следующая страница)
+                    // Свайп влево - следующая страница
                     showPage(currentPage + 1);
                 } else {
-                    // Свайп вправо (предыдущая страница)
+                    // Свайп вправо - предыдущая страница
                     showPage(currentPage - 1);
                 }
             }
         });
     }
 
-    // Привязываем обработчик событий к словам
+    // Привязываем обработчик нажатия к словам
     function bindWordClickHandler() {
         $('.word').off('click').on('click', function() {
             const word = $(this).data('word');
             currentWord = word;
 
-            // Получаем окружающий контекст (примерно 10 слов до и после)
+            // Получаем окружающий контекст
             const wordElements = $('.word');
             const currentIndex = wordElements.index(this);
             const startIndex = Math.max(0, currentIndex - 10);
@@ -263,14 +277,28 @@ $(document).ready(function() {
             // Включаем кнопку перевода в чате
             $('#translateWord').prop('disabled', false);
 
-            // Получаем информацию о слове
+            // Получаем информацию о слове через API
             fetchWordInfo(word);
         });
     }
 
-    // Обрабатываем изменение размера шрифта
+    // Обрабатываем изменения размера шрифта
     function handleFontSizeChange() {
-        // Перезагружаем пагинацию при изменении размера шрифта
+        // Если размер шрифта меняется, нужно пересчитать количество строк и символов
+        let fontSize = parseInt($('body').css('--reader-font-size')) || 18;
+        // Корректировка параметров на основе размера шрифта
+        if (fontSize <= 16) {
+            // Маленький шрифт, больше строк
+            MAX_LINES_PER_PAGE = 30;
+        } else if (fontSize >= 22) {
+            // Большой шрифт, меньше строк
+            MAX_LINES_PER_PAGE = 20;
+        } else {
+            // Стандартный размер
+            MAX_LINES_PER_PAGE = 25;
+        }
+
+        // Перезагружаем пагинацию
         initializePagination();
     }
 
@@ -286,9 +314,9 @@ $(document).ready(function() {
         setTimeout(handleFontSizeChange, 100);
     });
 
-    // Обработчик для события прокрутки колесиком мыши (для навигации)
+    // Обработчик для прокрутки колесиком мыши
     $('.reader-container').on('wheel', function(e) {
-        // Только обрабатываем большие прокрутки, чтобы избежать случайных переключений страниц
+        // Только обрабатываем большие прокрутки
         if (Math.abs(e.originalEvent.deltaY) > 50) {
             if (e.originalEvent.deltaY > 0) {
                 // Прокрутка вниз - следующая страница
@@ -297,18 +325,18 @@ $(document).ready(function() {
                 // Прокрутка вверх - предыдущая страница
                 showPage(currentPage - 1);
             }
-            // Предотвращаем стандартную прокрутку страницы
+            // Предотвращаем стандартную прокрутку
             e.preventDefault();
         }
     });
 
     // Инициализируем пагинацию после загрузки страницы
-    console.log("Initializing reader.js");
+    console.log("Reader.js loaded, initializing pagination");
     initializePagination();
 
-    // Также повторно инициализируем пагинацию при изменении размера окна
+    // Перезагружаем пагинацию при изменении размера окна
     $(window).on('resize', function() {
-        // Небольшая задержка для уменьшения частоты вызовов
+        // Задержка для уменьшения частоты вызовов
         clearTimeout(window.resizeTimeout);
         window.resizeTimeout = setTimeout(function() {
             initializePagination();

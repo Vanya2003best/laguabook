@@ -152,6 +152,142 @@
         margin-bottom: 10px;
         max-width: 80%;
     }
+    .reader-container {
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: var(--bg-color);
+    min-height: 700px; /* Фиксированная минимальная высота для страниц */
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .reader-text {
+        line-height: 1.6;
+        font-size: var(--reader-font-size, 18px);
+        font-family: 'Georgia', serif;
+        min-height: 600px; /* Минимальная высота для контента */
+    }
+
+    .pagination-controls {
+        padding: 10px 0;
+        margin-bottom: 20px;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .pagination-controls button {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+    .pagination-controls span {
+        font-size: 0.95rem;
+        color: var(--text-color);
+    }
+
+    /* Стили для предотвращения выделения текста при свайпе на мобильных устройствах */
+    .reader-text {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+
+    .word {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+    }
+    .page-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        z-index: 10;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 20px;
+        border-radius: 10px;
+        display: none;
+    }
+
+    /* Стили для анимации перехода между страницами */
+    .reader-text {
+        transition: opacity 0.2s ease;
+    }
+    
+    .reader-text.loading {
+        opacity: 0.5;
+    }
+    .reader-container {
+    position: relative;
+    max-width: 800px;
+    margin: 25px auto;
+    padding: 20px;
+    background-color: var(--bg-color);
+   /* height: 75vh; /* Fixed height based on viewport */
+    overflow: hidden; /* Hide overflow for page-flip effect */
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.reader-text {
+    line-height: 1.6;
+    font-size: var(--reader-font-size, 18px);
+    font-family: 'Georgia', serif;
+    transition: opacity 0.3s ease;
+}
+
+.reader-text.loading {
+    opacity: 0.5;
+}
+/* Temp container for measuring content */
+.temp-measure-container {
+    position: absolute;
+    visibility: hidden;
+    height: auto;
+    width: auto;
+    top: -9999px;
+    left: -9999px;
+}
+
+/* Media queries for different screen sizes */
+@media (max-height: 600px) {
+    .reader-container {
+        height: 65vh; /* Less height for smaller screens */
+    }
+}
+
+@media (min-height: 1000px) {
+    .reader-container {
+        height: 80vh; /* More height for larger screens */
+    }
+}
+
+/* Make sure pagination controls stay at the top */
+.pagination-controls {
+    padding: 10px 0;
+    margin-bottom: 15px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+/* Reader controls at bottom */
+.reader-controls {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: var(--bg-color);
+    padding: 10px 20px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    z-index: 100;
+}
 </style>
 {% endblock %}
 
@@ -375,7 +511,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/reader.js') }}"></script>
 <script>
     $(document).ready(function() {
         // Current word being viewed
@@ -733,5 +868,431 @@
             });
         }
     });
+    function forcePagination() {
+    console.log("Starting pagination with enhanced controls");
+
+    // Полифилл для crypto.randomUUID
+    if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
+        crypto.randomUUID = function() {
+            // Простая функция для генерации UUID v4
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        };
+    }
+
+    // Get original text content
+    const originalContent = $('.reader-text').html();
+    if (!originalContent || originalContent.trim() === '') {
+        console.error('No text content to paginate');
+        return;
+    }
+
+    // Clear the text container
+    $('.reader-text').empty();
+
+    // Create a temporary container for measuring content height
+    const $tempContainer = $('<div class="temp-measure-container"></div>');
+    $tempContainer.css({
+        'position': 'absolute',
+        'visibility': 'hidden',
+        'width': $('.reader-text').width() + 'px',
+        'font-size': $('.reader-text').css('font-size'),
+        'line-height': $('.reader-text').css('line-height'),
+        'font-family': $('.reader-text').css('font-family')
+    });
+    $('body').append($tempContainer);
+
+    // Get the target height for each page (25% of viewport height for long books)
+    const bookLength = originalContent.length;
+    const targetHeight = Math.floor(window.innerHeight * 0.25);
+    console.log(`Book length: ${bookLength}, using height factor: 0.25`);
+    console.log(`Target page height: ${targetHeight}px`);
+
+    // Split text into paragraphs
+    const paragraphs = originalContent.split(/<br\s*\/?>/i).filter(p => p.trim() !== '');
+
+    // Arrays to store page content
+    const pages = [];
+    let currentPage = '';
+    let currentPageHeight = 0;
+
+    // Function to check if an HTML string has balanced tags
+    function hasBalancedTags(htmlString) {
+        const openTagCount = (htmlString.match(/</g) || []).length;
+        const closeTagCount = (htmlString.match(/>/g) || []).length;
+        return openTagCount === closeTagCount;
+    }
+
+    // Function to find a good split point that doesn't break HTML tags
+    function findSafeSplitPoint(htmlString, approximatePoint) {
+        // First try to find a good sentence end
+        const searchRange = 200;
+        const forwardText = htmlString.substring(approximatePoint, Math.min(htmlString.length, approximatePoint + searchRange));
+        const forwardMatch = forwardText.match(/[.!?]\s/);
+
+        if (forwardMatch) {
+            const potentialSplit = approximatePoint + forwardMatch.index + 2;
+            const textBeforeSplit = htmlString.substring(0, potentialSplit);
+            if (hasBalancedTags(textBeforeSplit)) {
+                return potentialSplit;
+            }
+        }
+
+        // If we can't find a sentence end with balanced tags, find the last balanced tag position
+        const textToCheck = htmlString.substring(0, approximatePoint + searchRange);
+        let bestPosition = 0;
+
+        for (let i = approximatePoint; i < Math.min(htmlString.length, approximatePoint + searchRange); i++) {
+            const textSlice = htmlString.substring(0, i);
+            if (hasBalancedTags(textSlice)) {
+                bestPosition = i;
+            }
+        }
+
+        return bestPosition > 0 ? bestPosition : approximatePoint;
+    }
+
+    // Simplify and just create small fixed-size pages
+    const chunkSize = 9350; // Примерное число символов на страницу
+
+    // Try using simpler approach first - fixed-size chunks with safe splits
+    let currentPos = 0;
+    const contentLength = originalContent.length;
+
+    while (currentPos < contentLength) {
+        // Calculate end position for this chunk
+        let endPos = Math.min(currentPos + chunkSize, contentLength);
+
+        // Don't break in the middle of an HTML tag
+        if (endPos < contentLength) {
+            // Look forward for the next >
+            const nextCloseTag = originalContent.indexOf('>', endPos);
+            // Look backward for the previous <
+            const prevOpenTag = originalContent.lastIndexOf('<', endPos);
+
+            // If we're inside a tag, move to the end of it
+            if (prevOpenTag > originalContent.lastIndexOf('>', endPos) && nextCloseTag !== -1) {
+                endPos = nextCloseTag + 1;
+            }
+
+            // Look for a sentence end
+            const lookBack = Math.min(300, endPos - currentPos);
+            const segment = originalContent.substring(endPos - lookBack, endPos);
+            const sentenceEnd = segment.lastIndexOf('. ');
+
+            if (sentenceEnd !== -1) {
+                endPos = endPos - lookBack + sentenceEnd + 2; // +2 for '. '
+            }
+        }
+
+        // Add this chunk as a page
+        pages.push(originalContent.substring(currentPos, endPos));
+        currentPos = endPos;
+    }
+
+    // Remove temporary container
+    $tempContainer.remove();
+
+    // Set total pages
+    let totalPages = pages.length;
+    console.log(`Final text division: ${totalPages} pages`);
+
+    // Add CSS for pagination controls and overlays
+    $('head').append(`
+        <style>
+            .bottom-pagination-controls {
+                margin-top: 20px;
+                border-top: 1px solid rgba(0,0,0,0.1);
+                padding: 10px 0;
+                text-align: center;
+                margin-bottom: 0px; /* Добавляем отступ снизу, чтобы нижняя панель не перекрывала */
+            }
+
+            .reader-text {
+                padding-bottom: 20px;
+                margin-bottom: 0; /* Сбрасываем внешний нижний отступ */
+            }
+
+            .page-overlay {
+                position: absolute;
+                top: 0;
+                height: 100%;
+                width: 15%;
+                z-index: 10;
+                cursor: pointer;
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+
+            .page-overlay:hover {
+                opacity: 0.1;
+                background-color: rgba(0, 0, 0, 0.05);
+            }
+
+            .page-overlay-left {
+                left: 0;
+            }
+
+            .page-overlay-right {
+                right: 0;
+            }
+
+            /* Стили для кнопок пагинации */
+            .pagination-controls button, .bottom-pagination-controls button {
+                width: 40px;
+                height: 40px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 50%;
+            }
+
+            .pagination-controls span, .bottom-pagination-controls span {
+                font-size: 0.95rem;
+                color: var(--text-color);
+            }
+
+            /* Улучшаем видимость кнопок пагинации */
+            .bottom-pagination-controls {
+                background-color: var(--bg-color);
+            }
+        </style>
+    `);
+
+    // Create pagination controls at the top
+    $('.pagination-controls').remove();
+    const paginationControls = `
+        <div class="pagination-controls text-center mb-3">
+            <button id="prev-page-top" class="btn btn-outline-secondary me-2" disabled>
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <span class="page-info mx-2">
+                1 / ${totalPages}
+            </span>
+            <button id="next-page-top" class="btn btn-outline-secondary ms-2" ${totalPages === 1 ? 'disabled' : ''}>
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    `;
+
+    $('.reader-container').prepend(paginationControls);
+
+    // Create pagination controls at the bottom - обратите внимание, что мы используем append, а не after
+    const bottomPaginationControls = `
+        <div class="bottom-pagination-controls">
+            <button id="prev-page-bottom" class="btn btn-outline-secondary me-2" disabled>
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <span class="page-info-bottom mx-2">
+                1 / ${totalPages}
+            </span>
+            <button id="next-page-bottom" class="btn btn-outline-secondary ms-2" ${totalPages === 1 ? 'disabled' : ''}>
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    `;
+
+    // Добавляем нижние кнопки пагинации ВНУТРЬ reader-container
+    $('.reader-container').append(bottomPaginationControls);
+
+    // Add click overlays for mouse navigation
+    $('.reader-container').append(`
+        <div class="page-overlay page-overlay-left"></div>
+        <div class="page-overlay page-overlay-right"></div>
+    `);
+
+    // Variables for pagination
+    let currentPageIndex = 0;
+
+    // Function to show page - simplified to reduce dependencies
+    function showPage(pageIndex) {
+        if (pageIndex < 0 || pageIndex >= totalPages) return;
+
+        try {
+            // Add loading class
+            $('.reader-text').addClass('loading');
+
+            // Get page content
+            const pageContent = pages[pageIndex];
+
+            // Update UI (simplified)
+            currentPageIndex = pageIndex;
+            $('.reader-text').html(pageContent);
+            $('.pagination-controls .page-info').text(`${pageIndex + 1} / ${totalPages}`);
+            $('.bottom-pagination-controls .page-info-bottom').text(`${pageIndex + 1} / ${totalPages}`);
+
+            // Update button states (top)
+            $('#prev-page-top').prop('disabled', pageIndex === 0);
+            $('#next-page-top').prop('disabled', pageIndex === totalPages - 1);
+
+            // Update button states (bottom)
+            $('#prev-page-bottom').prop('disabled', pageIndex === 0);
+            $('#next-page-bottom').prop('disabled', pageIndex === totalPages - 1);
+
+            // Rebind word click handlers
+            try {
+                bindWordClickHandler();
+            } catch (e) {
+                console.error("Error binding word handlers:", e);
+            }
+
+            // Remove loading class
+            $('.reader-text').removeClass('loading');
+
+            // Scroll to top of page for better reading experience
+            $('.reader-container').scrollTop(0);
+        } catch (error) {
+            console.error("Error displaying page:", error);
+            // Basic fallback
+            $('.reader-text').html("Error displaying page. Please try refreshing.");
+            $('.reader-text').removeClass('loading');
+        }
+    }
+
+    // Bind handlers to top buttons
+    $('#prev-page-top').off('click').on('click', function() {
+        showPage(currentPageIndex - 1);
+    });
+
+    $('#next-page-top').off('click').on('click', function() {
+        showPage(currentPageIndex + 1);
+    });
+
+    // Bind handlers to bottom buttons
+    $('#prev-page-bottom').off('click').on('click', function() {
+        showPage(currentPageIndex - 1);
+    });
+
+    $('#next-page-bottom').off('click').on('click', function() {
+        showPage(currentPageIndex + 1);
+    });
+
+    let lastWheelTime = 0;
+
+    $('.reader-container').off('wheel').on('wheel', function(e) {
+        const now = Date.now();
+        const timeSinceLastScroll = now - lastWheelTime;
+
+        if (timeSinceLastScroll < 300) return;  // минимальная задержка между скроллами
+
+        const direction = e.originalEvent.deltaY;
+
+        if (direction > 0) {
+            // Колесо вниз — следующая страница
+            showPage(currentPageIndex + 1);
+        } else if (direction < 0) {
+            // Колесо вверх — предыдущая страница
+            showPage(currentPageIndex - 1);
+        }
+
+        lastWheelTime = now;
+        e.preventDefault();
+    });
+
+
+
+    // Keyboard navigation
+    $(document).off('keydown.pagination').on('keydown.pagination', function(e) {
+        if (e.key === 'ArrowLeft') {
+            showPage(currentPageIndex - 1);
+        } else if (e.key === 'ArrowRight') {
+            showPage(currentPageIndex + 1);
+        }
+    });
+
+    // Mouse wheel navigation - ИСПРАВЛЕННАЯ ЛОГИКА
+    $('.reader-container').off('wheel').on('wheel', function(e) {
+        // Detect if we're at the top or bottom of the container
+        const container = $(this);
+        const atTop = container.scrollTop() <= 0;
+        const atBottom = container.scrollTop() + container.innerHeight() >= container[0].scrollHeight - 10;
+
+        // Only navigate if we're at the edge and trying to scroll further
+        if ((atTop && e.originalEvent.deltaY < 0) || (atBottom && e.originalEvent.deltaY > 0)) {
+            // Determine direction
+            if (e.originalEvent.deltaY < 0 && atTop) {
+                // Скролл вверх когда мы уже вверху - идем на предыдущую страницу
+                showPage(currentPageIndex - 1);
+                e.preventDefault();
+            } else if (e.originalEvent.deltaY > 0 && atBottom) {
+                // Скролл вниз когда мы уже внизу - идем на следующую страницу
+                showPage(currentPageIndex + 1);
+                e.preventDefault();
+            }
+        }
+    });
+
+    // Swipe navigation
+    let touchStartX = 0;
+    $('.reader-container').off('touchstart').on('touchstart', function(e) {
+        touchStartX = e.originalEvent.touches[0].clientX;
+    });
+
+    $('.reader-container').off('touchend').on('touchend', function(e) {
+        const touchEndX = e.originalEvent.changedTouches[0].clientX;
+        const diff = touchStartX - touchEndX;
+
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+                // Swipe left - next page
+                showPage(currentPageIndex + 1);
+            } else {
+                // Swipe right - previous page
+                showPage(currentPageIndex - 1);
+            }
+        }
+    });
+
+    // Show first page
+    showPage(0);
+}
+
+    // Функция для привязки обработчиков к словам (копия из основного скрипта)
+    function bindWordClickHandler() {
+        $('.word').off('click').on('click', function() {
+            const word = $(this).data('word');
+            currentWord = word;
+
+            // Получаем окружающий контекст
+            const wordElements = $('.word');
+            const currentIndex = wordElements.index(this);
+            const startIndex = Math.max(0, currentIndex - 10);
+            const endIndex = Math.min(wordElements.length - 1, currentIndex + 10);
+
+            let contextWords = [];
+            for (let i = startIndex; i <= endIndex; i++) {
+                const element = wordElements[i];
+                if (i === currentIndex) {
+                    contextWords.push('<strong>' + $(element).text() + '</strong>');
+                } else {
+                    contextWords.push($(element).text());
+                }
+            }
+
+            currentWordContext = contextWords.join(' ');
+
+            // Обновляем модальное окно и показываем его
+            $('#wordTitle').text(word);
+            $('#wordLoading').removeClass('d-none');
+            $('#wordContent').addClass('d-none');
+            $('#wordError').addClass('d-none');
+
+            const modal = new bootstrap.Modal(document.getElementById('wordInfoModal'));
+            modal.show();
+
+            // Включаем кнопку перевода в чате
+            $('#translateWord').prop('disabled', false);
+
+            // Получаем информацию о слове
+            fetchWordInfo(word);
+        });
+    }
+
+    // Запускаем принудительное разбиение через 500 мс после загрузки страницы
+    setTimeout(function() {
+        forcePagination();
+    }, 500);
 </script>
 {% endblock %}
