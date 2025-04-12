@@ -8,89 +8,151 @@ $(document).ready(function() {
     let paginatedContent = [];
 
     // Инициализация пагинации
-    function initializePagination() {
-        const content = $('.reader-text').html();
-        $('.reader-text').empty();
+    // Измененная функция инициализации пагинации
+function initializePagination() {
+    const content = $('.reader-text').html();
+    $('.reader-text').empty();
 
-        // Создаем временный элемент для измерения высоты контента
-        const tempElement = $('<div class="reader-text-temp"></div>').html(content);
-        tempElement.css({
-            'position': 'absolute',
-            'visibility': 'hidden',
-            'width': $('.reader-container').width() + 'px',
-            'font-size': $('body').css('--reader-font-size'),
-            'line-height': '1.6'
-        });
+    // Создаем временный элемент
+    const tempElement = $('<div class="reader-text-temp"></div>').html(content);
+    tempElement.css({
+        'position': 'absolute',
+        'visibility': 'hidden',
+        'width': $('.reader-container').width() + 'px',
+        'font-size': $('body').css('--reader-font-size') || '18px',
+        'line-height': '1.6'
+    });
 
-        $('body').append(tempElement);
-        const fullHeight = tempElement.height();
+    $('body').append(tempElement);
 
-        // Разделяем содержимое на страницы
-        const words = tempElement.find('.word, br').toArray();
-        let pageContent = [];
-        let currentHeight = 0;
-        let pageContentDiv = $('<div></div>');
+    // Получаем весь текст
+    const textContent = tempElement.text();
+    const paragraphs = content.split('<br>');
 
-        words.forEach(function(word) {
-            const clone = $(word).clone();
-            pageContentDiv.append(clone);
+    // Определяем высоту страницы - меньшее значение для более частого разбиения
+    const pageHeight = 400;
 
-            // Если это <br>, то сразу добавляем break
-            if (word.tagName === 'BR') {
-                pageContentDiv.append(' ');
-            }
+    // Массив для хранения содержимого каждой страницы
+    paginatedContent = [];
 
-            // Проверяем высоту
-            if (pageContentDiv.height() > pageHeight) {
-                // Сохраняем содержимое страницы до превышения высоты
-                paginatedContent.push(pageContent.join(' '));
+    // Текущая страница и высота
+    let currentPageContent = '';
+    let currentPageElement = $('<div></div>');
+    currentPageElement.css({
+        'position': 'absolute',
+        'visibility': 'hidden',
+        'width': $('.reader-container').width() + 'px',
+        'font-size': $('body').css('--reader-font-size') || '18px',
+        'line-height': '1.6'
+    });
+    $('body').append(currentPageElement);
 
-                // Начинаем новую страницу с текущего слова
-                pageContent = [clone.prop('outerHTML')];
-                pageContentDiv = $('<div></div>');
-                pageContentDiv.append(clone);
-            } else {
-                // Добавляем слово к текущей странице
-                pageContent.push(clone.prop('outerHTML'));
-            }
-        });
+    // Разбиваем содержимое на страницы по параграфам
+    paragraphs.forEach(function(paragraph) {
+        // Добавляем параграф ко временному элементу
+        const originalHeight = currentPageElement.height();
+        currentPageElement.html(currentPageContent + paragraph + '<br>');
 
-        // Добавляем последнюю страницу, если она не пуста
-        if (pageContent.length > 0) {
-            paginatedContent.push(pageContent.join(' '));
+        // Если высота превысила лимит, начинаем новую страницу
+        if (currentPageElement.height() > pageHeight && currentPageContent !== '') {
+            paginatedContent.push(currentPageContent);
+            currentPageContent = paragraph + '<br>';
+        } else {
+            currentPageContent += paragraph + '<br>';
         }
+    });
 
-        totalPages = paginatedContent.length;
-        tempElement.remove();
-
-        // Добавляем элементы управления пагинацией
-        addPaginationControls();
-
-        // Показываем первую страницу
-        showPage(1);
+    // Добавляем последнюю страницу, если она не пуста
+    if (currentPageContent !== '') {
+        paginatedContent.push(currentPageContent);
     }
+
+    // Если получилась только одна страница, разбиваем ее на более мелкие части
+    if (paginatedContent.length <= 1 && textContent.length > 1000) {
+        paginatedContent = [];
+        currentPageContent = '';
+
+        // Разбиваем по предложениям
+        const sentences = content.split('. ');
+
+        sentences.forEach(function(sentence) {
+            const originalHeight = currentPageElement.height();
+            currentPageElement.html(currentPageContent + sentence + '. ');
+
+            if (currentPageElement.height() > pageHeight && currentPageContent !== '') {
+                paginatedContent.push(currentPageContent);
+                currentPageContent = sentence + '. ';
+            } else {
+                currentPageContent += sentence + '. ';
+            }
+        });
+
+        // Добавляем последнюю страницу
+        if (currentPageContent !== '') {
+            paginatedContent.push(currentPageContent);
+        }
+    }
+
+    // Если все еще одна страница, делим на равные части
+    if (paginatedContent.length <= 1 && textContent.length > 500) {
+        paginatedContent = [];
+        const totalChars = content.length;
+        const charsPerPage = 1500; // примерное количество символов на страницу
+
+        for (let i = 0; i < totalChars; i += charsPerPage) {
+            const pageContent = content.substring(i, Math.min(i + charsPerPage, totalChars));
+            paginatedContent.push(pageContent);
+        }
+    }
+
+    // Удаляем временные элементы
+    tempElement.remove();
+    currentPageElement.remove();
+
+    // Обновляем количество страниц
+    totalPages = paginatedContent.length;
+
+    // Добавляем элементы управления пагинацией
+    if (totalPages > 1) {
+        console.log("Найдено страниц: " + totalPages);
+    } else {
+        console.log("Только одна страница");
+        // Добавляем принудительное разделение для тестирования
+        if (content.length > 300) {
+            const middleIndex = Math.floor(content.length / 2);
+            paginatedContent = [
+                content.substring(0, middleIndex),
+                content.substring(middleIndex)
+            ];
+            totalPages = 2;
+            console.log("Принудительно разделено на 2 страницы");
+        }
+    }
+
+    // Показываем первую страницу
+    showPage(1);
+}
 
     // Показываем указанную страницу
     function showPage(pageNumber) {
-        if (pageNumber < 1 || pageNumber > totalPages) return;
+    if (pageNumber < 1 || pageNumber > totalPages) return;
 
-        currentPage = pageNumber;
-        $('.reader-text').html(paginatedContent[pageNumber - 1]);
+    currentPage = pageNumber;
+    $('.reader-text').html(paginatedContent[pageNumber - 1]);
 
-        // Обновляем отображение номера страницы
-        $('#current-page').text(currentPage);
-        $('#total-pages').text(totalPages);
+    // Обновляем отображение номера страницы
+    $('.pagination-controls span:first-child').text(currentPage + ' / ' + totalPages);
 
-        // Обновляем состояние кнопок
-        $('#prev-page').prop('disabled', currentPage === 1);
-        $('#next-page').prop('disabled', currentPage === totalPages);
+    // Обновляем состояние кнопок
+    $('.pagination-controls button:first-child').prop('disabled', currentPage === 1);
+    $('.pagination-controls button:last-child').prop('disabled', currentPage === totalPages);
 
-        // Привязываем обработчик событий к словам заново
-        bindWordClickHandler();
+    // Прокручиваем в начало контейнера
+    $('.reader-container').scrollTop(0);
 
-        // Прокручиваем в начало контейнера
-        $('.reader-container').scrollTop(0);
-    }
+    // Привязываем обработчик событий к словам заново
+    bindWordClickHandler();
+}
 
     // Добавляем элементы управления пагинацией
     function addPaginationControls() {
