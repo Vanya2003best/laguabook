@@ -1,0 +1,19 @@
+# app/templates/errors/500.html
+{% extends "layout.html" %}
+
+{% block title %}{{ _('Server Error') }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center py-5">
+        <div class="display-1 text-muted mb-4">
+            <i class="fas fa-bug"></i>
+        </div>
+        <h1 class="mb-4">{{ _('500 - Server Error') }}</h1>
+        <p class="lead mb-4">{{ _('Sorry, something went wrong on our end. We\'re working to fix the issue.') }}</p>
+        <a href="{{ url_for('book.library') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-home me-1"></i> {{ _('Return to Library') }}
+        </a>
+    </div>
+</div>
+{% endblock %}

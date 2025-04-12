@@ -1,0 +1,139 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ _('My Library') }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>{{ _('My Library') }}</h1>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('book.upload') }}" class="btn btn-primary">
+            <i class="fas fa-upload me-1"></i> {{ _('Upload Book') }}
+        </a>
+    </div>
+</div>
+
+<!-- Search Bar -->
+<div class="row mb-4">
+    <div class="col-md-8 mx-auto">
+        <div class="input-group">
+            <span class="input-group-text">
+                <i class="fas fa-search"></i>
+            </span>
+            <input type="text" id="library-search" class="form-control" placeholder="{{ _('Search by title or author...') }}">
+        </div>
+    </div>
+</div>
+
+<!-- Book Library Grid -->
+<div class="row" id="book-grid">
+    {% if books %}
+        {% for book in books %}
+        <div class="col-md-4 col-lg-3 mb-4">
+            <div class="card h-100 book-card">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <span class="badge bg-{{ book.language_color }}">{{ book.language }}</span>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('book.book_details', book_id=book.id) }}">
+                                    <i class="fas fa-info-circle me-1"></i> {{ _('Details') }}
+                                </a>
+                            </li>
+                            <li>
+                                <form action="{{ url_for('book.delete_book', book_id=book.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="dropdown-item text-danger" onclick="return confirm('{{ _('Are you sure you want to delete this book?') }}')">
+                                        <i class="fas fa-trash-alt me-1"></i> {{ _('Delete') }}
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title text-truncate">{{ book.title }}</h5>
+                    <p class="card-text text-muted">{{ book.author or _('Unknown author') }}</p>
+                    <div class="mt-auto">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                {{ book.word_count }} {{ _('words') }}
+                            </small>
+                            <small class="text-muted">
+                                {{ book.file_type.upper() }}
+                            </small>
+                        </div>
+                        <div class="progress mt-2" style="height: 5px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ book.progress }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-top-0">
+                    <a href="{{ url_for('reader.view', book_id=book.id) }}" class="btn btn-success w-100">
+                        {% if book.last_read_at %}
+                        <i class="fas fa-book-open me-1"></i> {{ _('Continue Reading') }}
+                        {% else %}
+                        <i class="fas fa-book me-1"></i> {{ _('Start Reading') }}
+                        {% endif %}
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12 text-center py-5">
+            <div class="display-1 text-muted mb-4">
+                <i class="fas fa-books"></i>
+            </div>
+            <h3 class="text-muted mb-4">{{ _('Your library is empty') }}</h3>
+            <p class="lead">{{ _('Upload your first book to start reading and learning.') }}</p>
+            <a href="{{ url_for('book.upload') }}" class="btn btn-primary btn-lg mt-3">
+                <i class="fas fa-upload me-1"></i> {{ _('Upload a Book') }}
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Empty Search Results Message (initially hidden) -->
+<div id="no-results" class="row d-none">
+    <div class="col-12 text-center py-5">
+        <h3 class="text-muted mb-4">{{ _('No books found matching your search') }}</h3>
+        <p class="lead">{{ _('Try a different search term or upload a new book.') }}</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // Library search functionality
+        $('#library-search').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            let resultsFound = false;
+
+            $('.book-card').each(function() {
+                const title = $(this).find('.card-title').text().toLowerCase();
+                const author = $(this).find('.card-text').text().toLowerCase();
+
+                if (title.includes(searchTerm) || author.includes(searchTerm)) {
+                    $(this).parent().removeClass('d-none');
+                    resultsFound = true;
+                } else {
+                    $(this).parent().addClass('d-none');
+                }
+            });
+
+            // Show/hide no results message
+            if (resultsFound) {
+                $('#no-results').addClass('d-none');
+            } else {
+                $('#no-results').removeClass('d-none');
+            }
+        });
+    });
+</script>
+{% endblock %}

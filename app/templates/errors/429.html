@@ -1,0 +1,19 @@
+# app/templates/errors/429.html
+{% extends "layout.html" %}
+
+{% block title %}{{ _('Too Many Requests') }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center py-5">
+        <div class="display-1 text-muted mb-4">
+            <i class="fas fa-hourglass-half"></i>
+        </div>
+        <h1 class="mb-4">{{ _('429 - Too Many Requests') }}</h1>
+        <p class="lead mb-4">{{ _('You have sent too many requests in a short period of time. Please wait before trying again.') }}</p>
+        <a href="{{ url_for('book.library') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-home me-1"></i> {{ _('Return to Library') }}
+        </a>
+    </div>
+</div>
+{% endblock %}

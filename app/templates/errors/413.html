@@ -1,0 +1,19 @@
+# app/templates/errors/413.html
+{% extends "layout.html" %}
+
+{% block title %}{{ _('File Too Large') }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center py-5">
+        <div class="display-1 text-muted mb-4">
+            <i class="fas fa-file-archive"></i>
+        </div>
+        <h1 class="mb-4">{{ _('413 - File Too Large') }}</h1>
+        <p class="lead mb-4">{{ _('The file you are trying to upload is too large. Maximum file size is') }} {{ current_app.config.get('MAX_CONTENT_LENGTH', 16*1024*1024) // (1024*1024) }} MB.</p>
+        <a href="{{ url_for('book.upload') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-upload me-1"></i> {{ _('Try Again') }}
+        </a>
+    </div>
+</div>
+{% endblock %}

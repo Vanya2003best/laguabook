@@ -1,0 +1,333 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ _('My Vocabulary') }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>{{ _('My Vocabulary') }}</h1>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exportModal">
+            <i class="fas fa-file-export me-1"></i> {{ _('Export') }}
+        </button>
+    </div>
+</div>
+
+<!-- Filter Panel -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('reader.vocabulary') }}" class="row g-3">
+            <div class="col-md-4">
+                <label for="search" class="form-label">{{ _('Search') }}</label>
+                <input type="text" class="form-control" id="search" name="search" value="{{ request.args.get('search', '') }}">
+            </div>
+            <div class="col-md-3">
+                <label for="book_id" class="form-label">{{ _('Book') }}</label>
+                <select class="form-select" id="book_id" name="book_id">
+                    <option value="0" {% if not request.args.get('book_id') or request.args.get('book_id') == '0' %}selected{% endif %}>{{ _('All Books') }}</option>
+                    {% for book in books %}
+                    <option value="{{ book.id }}" {% if request.args.get('book_id')|int == book.id %}selected{% endif %}>{{ book.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="sort_by" class="form-label">{{ _('Sort By') }}</label>
+                <select class="form-select" id="sort_by" name="sort_by">
+                    <option value="last_reviewed" {% if not request.args.get('sort_by') or request.args.get('sort_by') == 'last_reviewed' %}selected{% endif %}>{{ _('Recently Reviewed') }}</option>
+                    <option value="created_at" {% if request.args.get('sort_by') == 'created_at' %}selected{% endif %}>{{ _('Recently Added') }}</option>
+                    <option value="word" {% if request.args.get('sort_by') == 'word' %}selected{% endif %}>{{ _('Alphabetical') }}</option>
+                    <option value="proficiency" {% if request.args.get('sort_by') == 'proficiency' %}selected{% endif %}>{{ _('Proficiency Level') }}</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-filter me-1"></i> {{ _('Filter') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Vocabulary List -->
+<div class="row">
+    {% if vocabulary_items %}
+        {% for item in vocabulary_items %}
+        <div class="col-lg-6 mb-3" id="word-{{ item.id }}">
+            <div class="vocabulary-item">
+                <div class="d-flex justify-content-between">
+                    <div class="word">{{ item.word }}</div>
+                    <div class="d-flex">
+                        <button class="btn btn-sm btn-outline-primary me-2" data-bs-toggle="modal" data-bs-target="#editModal" data-word-id="{{ item.id }}" data-word="{{ item.word }}">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="confirmRemoveWord({{ item.id }})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+
+                {% if item.context %}
+                <div class="context mt-2">
+                    "{{ item.context }}"
+                </div>
+                {% endif %}
+
+                {% if item.notes %}
+                <div class="notes mt-2">
+                    {{ item.notes }}
+                </div>
+                {% endif %}
+
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="proficiency-indicator">
+                        {% for i in range(5) %}
+                            <div class="proficiency-dot {% if i < item.proficiency %}active{% endif %}"></div>
+                        {% endfor %}
+                    </div>
+
+                    {% if item.book_title %}
+                    <div class="source">
+                        <i class="fas fa-book me-1"></i> {{ item.book_title }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12 text-center py-5">
+            <div class="display-1 text-muted mb-4">
+                <i class="fas fa-language"></i>
+            </div>
+            <h3 class="text-muted mb-4">{{ _('Your vocabulary list is empty') }}</h3>
+            <p class="lead">{{ _('Start reading books and adding words to build your vocabulary.') }}</p>
+            <a href="{{ url_for('book.library') }}" class="btn btn-primary btn-lg mt-3">
+                <i class="fas fa-book me-1"></i> {{ _('Go to Library') }}
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Pagination -->
+{% if vocabulary_items and pagination.pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('reader.vocabulary', page=pagination.page-1, **request.args) }}">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+
+        {% for p in range(max(1, pagination.page - 2), min(pagination.pages + 1, pagination.page + 3)) %}
+        <li class="page-item {% if p == pagination.page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('reader.vocabulary', page=p, **request.args) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+
+        <li class="page-item {% if pagination.page == pagination.pages %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('reader.vocabulary', page=pagination.page+1, **request.args) }}">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+
+<!-- Edit Word Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Edit Word') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editWordForm">
+                    <input type="hidden" id="edit-word-id" name="word_id">
+
+                    <div class="mb-3">
+                        <label for="edit-word" class="form-label">{{ _('Word') }}</label>
+                        <input type="text" class="form-control" id="edit-word" name="word" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-notes" class="form-label">{{ _('Notes') }}</label>
+                        <textarea class="form-control" id="edit-notes" name="notes" rows="3"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-proficiency" class="form-label">{{ _('Proficiency Level') }}</label>
+                        <select class="form-select" id="edit-proficiency" name="proficiency">
+                            <option value="0">{{ _('Not Known') }}</option>
+                            <option value="1">{{ _('Recognize') }}</option>
+                            <option value="2">{{ _('Understand') }}</option>
+                            <option value="3">{{ _('Can Use') }}</option>
+                            <option value="4">{{ _('Know Well') }}</option>
+                            <option value="5">{{ _('Mastered') }}</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="saveWordChanges">{{ _('Save Changes') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Export Vocabulary') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm" action="{{ url_for('reader.export_vocabulary') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label for="export-format" class="form-label">{{ _('Export Format') }}</label>
+                        <select class="form-select" id="export-format" name="format">
+                            <option value="csv">CSV (Excel, Google Sheets)</option>
+                            <option value="txt">Text File</option>
+                            <option value="anki">Anki Deck</option>
+                            <option value="pdf">PDF Document</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include-context" name="include_context" checked>
+                            <label class="form-check-label" for="include-context">
+                                {{ _('Include context') }}
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include-notes" name="include_notes" checked>
+                            <label class="form-check-label" for="include-notes">
+                                {{ _('Include notes') }}
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include-proficiency" name="include_proficiency" checked>
+                            <label class="form-check-label" for="include-proficiency">
+                                {{ _('Include proficiency levels') }}
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="submit" form="exportForm" class="btn btn-primary">{{ _('Export') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Edit word modal
+    $('#editModal').on('show.bs.modal', function (event) {
+        const button = $(event.relatedTarget);
+        const wordId = button.data('word-id');
+        const word = button.data('word');
+
+        $('#edit-word-id').val(wordId);
+        $('#edit-word').val(word);
+
+        // Fetch word details
+        fetch(`/api/vocabulary/${wordId}`)
+            .then(response => response.json())
+            .then(data => {
+                $('#edit-notes').val(data.notes || '');
+                $('#edit-proficiency').val(data.proficiency);
+            });
+    });
+
+    // Save word changes
+    $('#saveWordChanges').on('click', function() {
+        const wordId = $('#edit-word-id').val();
+        const notes = $('#edit-notes').val();
+        const proficiency = $('#edit-proficiency').val();
+
+        fetch(`/api/vocabulary/update/${wordId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                notes: notes,
+                proficiency: parseInt(proficiency)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hide modal
+                $('#editModal').modal('hide');
+
+                // Show success message
+                showToast('{{ _("Word updated successfully") }}');
+
+                // Refresh page after a short delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                showToast('{{ _("Error updating word") }}', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('{{ _("Error updating word") }}', 'danger');
+        });
+    });
+
+    // Confirm word removal
+    function confirmRemoveWord(wordId) {
+        if (confirm('{{ _("Are you sure you want to remove this word from your vocabulary?") }}')) {
+            fetch(`/api/vocabulary/remove/${wordId}`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove word element from DOM
+                    $(`#word-${wordId}`).fadeOut(300, function() {
+                        $(this).remove();
+
+                        // If no words left, reload to show empty state
+                        if ($('.vocabulary-item').length === 0) {
+                            window.location.reload();
+                        }
+                    });
+
+                    showToast('{{ _("Word removed from vocabulary") }}');
+                } else {
+                    showToast('{{ _("Error removing word") }}', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('{{ _("Error removing word") }}', 'danger');
+            });
+        }
+    }
+</script>
+{% endblock %}
